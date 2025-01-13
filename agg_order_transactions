@@ -1,0 +1,858 @@
+USE twistdw_s_qa;
+--STEP 1: CREATE A YEAR TABLE TEMPLATE
+DROP TABLE IF EXISTS posting_date_placeholder_temp;
+CREATE TEMPORARY TABLE posting_date_placeholder_temp (tminus INT, posting_date_fy STRING);
+    INSERT INTO posting_date_placeholder_temp (tminus, posting_date_fy) VALUES
+    (20,YEAR(DATEADD(DAY,92,current_date)) -20),
+    (19,YEAR(DATEADD(DAY,92,current_date)) -19),
+    (18,YEAR(DATEADD(DAY,92,current_date)) -18),
+    (17,YEAR(DATEADD(DAY,92,current_date)) -17),
+    (16,YEAR(DATEADD(DAY,92,current_date)) -16),
+    (15,YEAR(DATEADD(DAY,92,current_date)) -15),
+    (14,YEAR(DATEADD(DAY,92,current_date)) -14),
+    (13,YEAR(DATEADD(DAY,92,current_date)) -13),
+    (12,YEAR(DATEADD(DAY,92,current_date)) -12),
+    (11,YEAR(DATEADD(DAY,92,current_date)) -11),
+    (10,YEAR(DATEADD(DAY,92,current_date)) -10),
+    (9,YEAR(DATEADD(DAY,92,current_date)) -9),
+    (8,YEAR(DATEADD(DAY,92,current_date)) -8),
+    (7,YEAR(DATEADD(DAY,92,current_date)) -7),
+    (6,YEAR(DATEADD(DAY,92,current_date)) -6),
+    (5,YEAR(DATEADD(DAY,92,current_date)) -5),
+    (4,YEAR(DATEADD(DAY,92,current_date)) -4),
+    (3,YEAR(DATEADD(DAY,92,current_date)) -3),
+    (2,YEAR(DATEADD(DAY,92,current_date)) -2),
+    (1,YEAR(DATEADD(DAY,92,current_date)) -1),
+    (0,YEAR(DATEADD(DAY,92,current_date)) -0);
+
+
+--STEP 2: CREATE CALCULATED DATE FIELDS and SHIPPING ADDRESS on the revenue cmb view
+DROP TABLE IF EXISTS revenue_cmb_temp1;
+CREATE TEMPORARY TABLE revenue_cmb_temp1 AS
+
+SELECT 
+main.*
+,CASE WHEN c.region = 'USA'           THEN 'North America' 
+      WHEN c.region = 'South America' THEN 'America Other'
+      WHEN c.region IS NULL           THEN 'Other'
+      ELSE c.region 
+ END AS ship_to_market
+,REGEXP_REPLACE(
+    REGEXP_REPLACE(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(
+                                REGEXP_REPLACE(
+                                    REGEXP_REPLACE(
+                                        REGEXP_REPLACE(
+                                            REGEXP_REPLACE(
+                                                REGEXP_REPLACE(
+                                                    REGEXP_REPLACE(
+                                                        REGEXP_REPLACE(
+                                                            REGEXP_REPLACE(
+                                                                REGEXP_REPLACE(
+                                                                    REGEXP_REPLACE(
+                                                                        REGEXP_REPLACE(
+                                                                            REGEXP_REPLACE(
+                                                                                REGEXP_REPLACE(
+                                                                                    REGEXP_REPLACE(
+                                                                                        REGEXP_REPLACE(
+                                                                                            --REGEXP_REPLACE(
+                                                                                                REGEXP_REPLACE(order_shipping_address_raw, 
+                                                                                                '\\.',''), --remove periods
+                                                                                            '\\bAVE\\b','AVENUE'), --convert ave to avenue
+                                                                                        '\\bAV\\b','AVENUE'), -- convert av to avenue
+                                                                                    '\\bST PAUL\\b','SAINT PAUL'), -- convert st paul to saint paul 
+                                                                                '\\bST LOUIS\\b','SAINT LOUIS'), -- convert st louis to saint louis
+                                                                            '\\bST\\b','STREET'), --convert st to street
+                                                                        '\\bBLVD\\b','BOULEVARD'), --convert blvd to boulevard   
+                                                                    '\\bBIVD\\b','BOULEVARD'), --convert bivd to boulevard
+                                                                '\\bPKWY\\b','PARKWAY'), -- convert pkwy to parkway
+                                                            '\\bRD\\b','ROAD'), --convert rd to road
+                                                        '\\bDR\\b','DRIVE'), --convert dr to drive
+                                                    '\\bCTR\\b','CENTER'), --convert ctr to center
+                                                '\\bSQ\\b','SQUARE'), -- convert sq to square
+                                            '\\bCIR\\b','CIRCLE'), -- convert cir to circle
+                                        '\\bCT\\b','COURT'),--convert ct to court
+                                    '\\bBLDG\\b','BUILDING'),--convert bldg to building
+                                '\\bBLD\\b','BUILDING'),--convert bld to building
+                            '\\bSTE\\b','SUITE'), --convert ste to suite
+                        '\\bRM\\b','ROOM'),--convert rm to room
+                    --'\\b1\\b', 'ONE'), -- convert 1 to one
+                '\\bE\\b','EAST'), -- convert E to EAST
+            '\\bNEW YORK CITY\\b','NEW YORK'), -- convert new your city to new york
+        '(\\d+)TH\\b','\\1'), --remote th from 85th ave
+    '\\-',' '), -- convert dash to spaces
+'\\ ','') --remove spaces
+AS order_shipping_address
+FROM (
+    SELECT 
+     r.SAP_ORDER
+    ,r.SFDC_ORDER_NAME
+    ,r.acctg_document_num AS sap_invoice_number
+    ,r.ACCT_DESC
+    ,r.COST_CENTER
+    ,r.PROFIT_CENTER
+    ,r.POSTING_PERIOD
+    ,r.POSTING_KEY
+    ,r.CUSTOMER
+    ,r.FISCAL_YEAR
+    ,r.GL_FISCAL_YEAR
+    ,r.RECORD_TYPE
+    ,r.CUSTOMER_GRP
+    ,r.PERIODYEAR
+    ,r.USER_NAME
+    ,r.TRANS_CRCY_AMT
+    ,r.ORIG_TRANS_CRCY_AMT
+    ,r.TRANSACTION_CRCY
+    ,r.LOCAL_CRCY_AMT
+    ,r.GRP_CRCY_AMT
+    ,r.GRP_CRNCY
+    ,r.CC_CRNCY_TYPE
+    ,r.BUS_TRANSACTION_TYPE
+    ,r.POSTING_DT
+    ,r.SALES_ORDER_ITEM
+    ,r.SALES_ORDER
+    ,r.SHIP_TO_PARTNER_NBR
+    ,r.SHIP_TO_PARTNER_NAME
+    ,r.SHIP_TO_PARTNER_TYPE
+    ,r.SHIP_TO_STREET
+    ,r.SHIP_TO_CITY
+    ,r.SHIP_TO_ZIPCODE
+    ,r.SHIP_TO_STATE_CODE
+    ,r.SHIP_TO_STATE
+    ,r.SHIP_TO_COUNTRY_CODE
+    ,r.SHIP_TO_COUNTRY AS ship_to_country_name
+    ,r.SHIP_TO_REGION
+    ,r.INDUSTRY
+    ,r.PROFIT_CENTER_ACCOUNTING
+    ,r.ENTERPRISE_ORGANIZATION
+    ,r.BUSINESS_UNIT
+    ,r.PRODUCT_FAMILY
+    ,r.PRODUCT_GROUP
+    ,r.PRODUCT
+    ,r.SUB_PRODUCT
+    ,r.UNIT_PRICE
+    ,r.QUANTITY
+    ,r.DISCOUNT
+    ,r.EXTENDED_PRICE
+    ,r.INVOICE_TS
+    ,r.INVOICE_TYPE
+    ,r.OPTY_OWNER
+    ,r.opty_owner_manager
+    ,r.SFDC_ACCT_NAME
+    ,r.PO_DATE
+    ,r.PLANT
+    ,r.SUPER_REGION
+    ,r.CUST_INDUSTRY
+    ,o.account_id as account_id_orig
+    ,o.order_id
+    ,o.ordered_amt
+    ,o.ship_to_country
+    ,o.order_created_ts AS order_placed_date
+    ,DATE_PART(QUARTER,DATEADD(DAY, 92, posting_dt))    as posting_fq
+    ,DATE_PART(YEAR,   DATEADD(DAY, 92, posting_dt))    as posting_fy
+    ,CASE WHEN YEAR(posting_dt) = YEAR(CURRENT_DATE) AND MONTH(CURRENT_DATE)>=10 THEN 365
+          WHEN YEAR(posting_dt) = YEAR(CURRENT_DATE)-1 AND MONTH(posting_dt)<10 THEN 365
+          WHEN YEAR(posting_dt) = YEAR(CURRENT_DATE)-1 AND MONTH(posting_dt)>=10 AND MONTH(CURRENT_DATE)>=10 THEN 365
+          WHEN YEAR(posting_dt) < YEAR(CURRENT_DATE)-1 THEN 365
+          WHEN MONTH(CURRENT_DATE)>=10 THEN DATEDIFF(DAY, TO_DATE(CAST(YEAR(CURRENT_DATE) AS VARCHAR) || '-10-01'), CURRENT_DATE) +1
+          WHEN MONTH(CURRENT_DATE)< 10 THEN DATEDIFF(DAY, TO_DATE(CAST(YEAR(CURRENT_DATE)-1 AS VARCHAR) || '-10-01'), CURRENT_DATE) +1
+     END AS days_in_fy --intended to calculate the days in the reporting period to normalize the tier on the current year.
+    ,UPPER(REPLACE(concat_ws(' ',r.ship_to_street
+              ,' ',r.ship_to_city
+              ,', ',r.ship_to_state_code
+              --,' ',LEFT(r.ship_to_zipcode,5)
+              ,' ',r.ship_to_country_code),',',''))
+     AS order_shipping_address_raw
+    ,o.ship_to_contact_id
+    ,o.bill_to_contact_id
+    ,o.order_owner_id
+    ,o.payment_method
+    ,o.opty_po_dt
+    ,o.opty_stage_name
+    ,o.opty_contact_id
+    ,o.opty_id
+    FROM twistdw_s.analytics.vw_revenue_cmb AS r
+    LEFT JOIN (SELECT * 
+               FROM (
+                    SELECT --this is needed because there are duplicate order names in salesforce (example: Q117119 has 4 records on FCT_SALES_ORDER. This is creating a cartesion product, which I fix with ths partitioned cleanup of fct_sales_order before joining
+                    order_name
+                    ,ord.id AS order_id
+                    ,ord.payment_method
+                    ,ord.ship_to_contact_id
+                    ,ord.bill_to_contact_id
+                    ,ord.order_owner_id
+                    ,ord.account_id
+                    ,ord.ordered_amt
+                    ,ord.order_created_ts
+                    ,ord.ship_to_country
+                    ,opp.po_date_c  AS opty_po_dt
+                    ,opp.stage_name AS opty_stage_name
+                    ,opp.contact_c  AS opty_contact_id
+                    ,opp.id         AS opty_id
+                    ,ROW_NUMBER() OVER(PARTITION BY order_name ORDER BY order_created_ts DESC) AS row_num
+                    FROM TWISTDW.TDW.FCT_SALES_ORDER AS ord
+                    LEFT JOIN fivetran_landing.salesforce.opportunity AS opp on ord.opty_id = opp.id
+                    ) as main
+                WHERE main.row_num = 1
+              ) AS o ON o.order_name = r.sfdc_order_name
+    ) AS main
+    LEFT JOIN twistdw.tdw.lkp_country_region_map as c ON c.country = COALESCE(main.ship_to_country_code,main.ship_to_country);
+
+
+
+
+    
+
+--STEP 3: CREATE AN ACCOUNT_ID_UPDATED FIELD AND CREATE THE revenue_cmb_temp TABLE THAT WILL BE REFERENCED THROUGHOUT THE REST OF THE QUERY
+--historic revenue records in SAP prior to mid-2020 do not have a corresponding account id. This applies the account_id of the nearest record with the same shipping address that has an account associated.
+
+DROP TABLE IF EXISTS not_null_accounts_temp;
+CREATE TEMPORARY TABLE not_null_accounts_temp AS
+    SELECT DISTINCT account_id_orig, order_shipping_address, posting_dt 
+    FROM revenue_cmb_temp1  
+    WHERE account_id_orig IS NOT NULL
+    ORDER BY posting_dt DESC;   
+
+DROP TABLE IF EXISTS null_accounts_temp;
+CREATE TEMPORARY TABLE null_accounts_temp AS
+    SELECT DISTINCT account_id_orig, order_shipping_address, posting_dt 
+    FROM revenue_cmb_temp1
+    WHERE account_id_orig IS NULL
+    ORDER BY posting_dt DESC;
+
+DROP TABLE IF EXISTS updated_null_accounts;
+CREATE TEMPORARY TABLE updated_null_accounts AS   
+    SELECT * 
+    FROM 
+        (
+        SELECT 
+        nn.account_id_orig
+        ,n.order_shipping_address
+        ,n.posting_dt
+        ,ROW_NUMBER() OVER (PARTITION BY n.order_shipping_address, n.posting_dt ORDER BY ABS(DATEDIFF(day, n.posting_dt, nn.posting_dt)) ASC) AS row_num --if the account id is missing in SAP, apply the account id used for the exact same shipping address from the nearest record.
+        FROM null_accounts_temp AS n
+        LEFT JOIN not_null_accounts_temp AS nn ON nn.order_shipping_address = n.order_shipping_address
+        ) AS main
+    WHERE row_num = 1;
+
+DROP TABLE IF EXISTS updated_accounts;
+CREATE TEMPORARY TABLE updated_accounts AS
+
+    SELECT 
+            r.*
+            ,COALESCE(r.account_id_orig,a.account_id_orig) AS account_id 
+            FROM revenue_cmb_temp1 AS r
+            LEFT JOIN updated_null_accounts AS a ON a.order_shipping_address = r.order_shipping_address 
+                                                AND a.posting_dt = r.posting_dt 
+                                                AND r.account_id_orig IS NULL 
+                                                AND a.account_id_orig IS NOT NULL;
+
+--one shipping address can be linked to many accounts. to get a MECE brakout of revenue by tiers, I have to pick one account to assign the shipping address to. here I'm finding the latest shipping account and assigning that to all the revenue for the shipping address.
+
+DROP TABLE IF EXISTS latest_account_temp;
+CREATE TEMPORARY TABLE latest_account_temp AS
+    SELECT * FROM (
+        SELECT 
+        order_shipping_address
+        ,account_id
+        ,ROW_NUMBER() OVER(PARTITION BY order_shipping_address ORDER BY posting_dt DESC) AS is_latest_order
+        FROM updated_accounts
+    ) AS main 
+    WHERE is_latest_order = 1;
+
+
+
+DROP TABLE IF EXISTS revenue_cmb_temp;
+CREATE TEMPORARY TABLE revenue_cmb_temp AS
+
+SELECT 
+ main.*
+,a.acct_name AS account_name
+,a.industry AS account_industry
+,a.type AS account_type
+,a.region AS account_region  
+,a.owner_name AS account_owner
+,l.account_id as account_id_latest
+FROM updated_accounts AS main
+LEFT JOIN latest_account_temp AS l ON l.order_shipping_address = main.order_shipping_address
+LEFT JOIN TWISTDW.TDW.DIM_ACCOUNT AS a ON a.id = main.account_id; --re-pull in the account details now that we've identified the best matching account 
+
+
+
+--STEP 4: FIND THE FIRST ORDER AT EACH LEVEL:  SHIPPING ADDRESS, ACCOUNT SHIPPING ADDRESS, ACCOUNT
+
+
+DROP TABLE IF EXISTS first_purchase_shipping_address_temp;
+CREATE TEMPORARY TABLE first_purchase_shipping_address_temp AS 
+SELECT
+c.*
+,d.account_id  
+,d.account_industry  
+FROM (
+    SELECT * FROM (
+        SELECT 
+        SFDC_Order_Name
+        ,order_id
+        ,opty_owner_manager
+        ,opty_owner
+        ,payment_method
+        ,opty_po_dt
+        ,opty_stage_name
+        ,opty_contact_id
+        ,opty_id
+        ,order_shipping_address
+        ,posting_dt AS first_order_posting_dt
+        ,posting_fq AS first_order_posting_fq
+        ,posting_fy AS first_order_posting_fy
+        ,sap_actual_order_revenue
+        ,ROW_NUMBER() OVER (PARTITION BY order_shipping_address ORDER BY posting_dt ASC) AS row_num 
+        FROM 
+            (
+                SELECT 
+                 SFDC_Order_Name
+                ,order_id
+                ,opty_owner_manager
+                ,opty_owner
+                ,payment_method
+                ,opty_po_dt
+                ,opty_stage_name
+                ,opty_contact_id
+                ,opty_id
+                ,order_shipping_address
+                ,posting_dt  
+                ,posting_fq  
+                ,posting_fy  
+                ,SUM(grp_crcy_amt) AS sap_actual_order_revenue
+                FROM revenue_cmb_temp AS r
+                GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13
+            ) AS a
+        --WHERE abs(a.sap_actual_order_revenue)>0
+        ) AS b
+    WHERE b.row_num = 1
+    ) AS c
+LEFT JOIN (SELECT sfdc_order_name,order_id, account_id,account_industry,count(*) FROM revenue_cmb_temp GROUP BY 1,2,3,4) AS d ON c.sfdc_order_name = d.sfdc_order_name;
+
+
+
+
+DROP TABLE IF EXISTS first_purchase_account_shipping_address_temp;
+CREATE TEMPORARY TABLE first_purchase_account_shipping_address_temp AS 
+    SELECT * FROM (
+        SELECT 
+        SFDC_Order_Name
+        ,order_id
+        ,opty_owner_manager
+        ,opty_owner
+        ,opty_po_dt
+        ,opty_stage_name
+        ,opty_contact_id
+        ,opty_id
+        ,payment_method
+        ,order_shipping_address
+        ,account_id
+        ,account_id_latest
+        ,account_name
+        ,account_industry
+        ,account_type
+        ,account_region  
+        ,account_owner
+        ,posting_dt AS first_order_posting_dt
+        ,posting_fq AS first_order_posting_fq
+        ,posting_fy AS first_order_posting_fy
+        ,sap_actual_order_revenue
+        ,ROW_NUMBER() OVER (PARTITION BY account_id, order_shipping_address ORDER BY posting_dt ASC) AS row_num 
+        FROM 
+            (
+                SELECT 
+                 account_id
+                ,account_id_latest
+                ,account_name
+                ,account_industry
+                ,account_type
+                ,account_region  
+                ,account_owner
+                ,SFDC_Order_Name
+                ,order_id
+                ,opty_owner_manager
+                ,opty_owner
+                ,opty_po_dt
+                ,opty_stage_name
+                ,opty_contact_id
+                ,opty_id
+                ,payment_method
+                ,order_shipping_address
+                ,posting_dt  
+                ,posting_fq  
+                ,posting_fy  
+                ,SUM(grp_crcy_amt) AS sap_actual_order_revenue
+                FROM revenue_cmb_temp AS r
+                GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20
+            ) AS main
+        --WHERE abs(main.sap_actual_order_revenue)>0
+        ) AS final
+    WHERE final.row_num = 1;
+
+DROP TABLE IF EXISTS first_account_purchase_temp;
+CREATE TEMPORARY TABLE first_account_purchase_temp AS 
+    SELECT * FROM (
+        SELECT 
+         account_id
+        ,account_id_latest
+        ,account_name
+        ,account_industry
+        ,account_type
+        ,account_region  
+        ,account_owner
+        ,sfdc_order_name
+        ,order_id
+        ,opty_owner_manager
+        ,opty_owner
+        ,first_order_posting_dt
+        ,first_order_posting_fq
+        ,first_order_posting_fy
+        ,sap_actual_order_revenue
+        ,ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY first_order_posting_dt ASC) AS row_num 
+        FROM 
+            (   SELECT
+                 account_id
+                ,account_id_latest
+                ,account_name
+                ,account_industry
+                ,account_type
+                ,account_region  
+                ,account_owner
+                ,sfdc_order_name
+                ,order_id
+                ,opty_owner_manager
+                ,opty_owner
+                ,posting_dt AS first_order_posting_dt
+                ,posting_fq AS first_order_posting_fq
+                ,posting_fy AS first_order_posting_fy
+                ,SUM(grp_crcy_amt) AS sap_actual_order_revenue
+                FROM revenue_cmb_temp AS r
+                GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14
+            ) AS main
+       --WHERE abs(main.sap_actual_order_revenue)>0
+        ) AS final
+    WHERE final.row_num = 1;
+
+   
+--STEP 5: CREATE a DATE<>SHIPPING ADDRESS BASE TABLE WHERE THE UNIQUE ACCOUNTID-SHIPPING ADDRESS COMBINATION IS REPEATED ON EACH YEAR, STARTING ON ITS FIRST PURCHASE YEAR AND CONTINUING ON TO THE CURRENT YEAR.
+
+DROP TABLE IF EXISTS unique_account_shipping_combos; --based on earliest posting_fy of each combination
+CREATE TEMPORARY TABLE  unique_account_shipping_combos AS
+    SELECT * 
+    FROM (
+            SELECT 
+            posting_fy
+            ,account_id
+            ,account_id_latest
+            ,account_name
+            ,account_industry
+            ,account_type
+            ,account_region  
+            ,account_owner
+            ,order_shipping_address
+            ,ship_to_market
+            ,ROW_NUMBER() OVER (PARTITIoN BY account_id, order_shipping_address ORDER BY posting_fy asc) as row_num
+            ,sum(grp_crcy_amt) AS sap_actual_order_revenue
+            FROM revenue_cmb_temp
+            GROUP BY 1,2,3,4,5,6,7,8,9,10
+            ORDER BY 1 DESC, 4 DESC
+         ) AS main
+    WHERE main.row_num = 1;
+
+DROP TABLE IF EXISTS year_shipping_address_base_table;
+CREATE TEMPORARY TABLE year_shipping_address_base_table AS 
+SELECT 
+ m.tminus
+,m.posting_date_fy
+,m.account_id
+,m.account_id_latest
+,m.account_name
+,m.account_industry
+,m.account_type
+,m.account_region  
+,m.account_owner
+,m.order_shipping_address
+,m.ship_to_market
+--,ff.account_industry AS first_shippingaddress_accountid_industry
+--,ff.first_order_posting_fy
+--,ff.first_order_posting_fq
+--,ff.first_order_posting_dt
+--,CASE WHEN ff.first_order_posting_fy IS NOT NULL THEN 1 ELSE 0 END AS is_first_purchase
+FROM (
+    SELECT
+    t.tminus
+    ,t.posting_date_fy 
+    ,ua.posting_fy
+    ,ua.account_id
+    ,ua.account_id_latest
+    ,ua.account_name
+    ,ua.account_industry
+    ,ua.account_type
+    ,ua.account_region  
+    ,ua.account_owner
+    ,ua.order_shipping_address
+    ,ua.ship_to_market
+    ,fp.first_order_posting_fy
+    ,fp.first_order_posting_fq
+    ,fp.first_order_posting_dt
+    
+    FROM posting_date_placeholder_temp AS t
+    LEFT JOIN unique_account_shipping_combos AS ua ON CAST(t.posting_date_fy AS INT)>=CAST(ua.posting_fy AS INT)
+    LEFT JOIN first_purchase_account_shipping_address_temp as fp ON fp.order_shipping_address = ua.order_shipping_address and coalesce(fp.account_id,'') = coalesce(ua.account_id,'')
+    ) AS m;
+--LEFT JOIN first_purchase_account_shipping_address_temp AS ff ON ff.order_shipping_address = m.order_shipping_address
+--                                        AND COALESCE(ff.account_id,'')= COALESCE(m.account_id,'');
+
+                                    
+--STEP 6: IDENTIFY THE TIER OF EACH ACCOUNT EACH YEAR:
+
+--derive the account tier for each year.
+DROP TABLE IF EXISTS derive_tier_temp;
+CREATE TEMPORARY TABLE derive_tier_temp AS
+    SELECT 
+     main.account_id
+  --  ,main.account_id_latest
+    ,main.account_name
+    ,main.account_industry
+    ,main.account_type
+    ,main.account_region
+    ,main.account_owner
+    ,main.posting_fy
+    ,main.days_in_fy
+    ,main.rev_per_fy_ratio
+    ,main.revenue  
+    ,CASE WHEN round(rev_per_fy_ratio,2) <= 68.50 THEN 'Tier 4'                                  --0 to 25000 absolute revenue in a complete year
+          WHEN round(rev_per_fy_ratio,2) >= 68.50 AND rev_per_fy_ratio <= 273.97 THEN 'Tier 3'   --25001 to 100000 absolute revenue in a complete year
+          WHEN round(rev_per_fy_ratio,2) >= 273.97 AND rev_per_fy_ratio <= 684.93 THEN 'Tier 2'   --100001 to 250000 absolute revenue in a complete year
+          WHEN round(rev_per_fy_ratio,2) >= 684.93 THEN 'Tier 1'                                  --250000+ absolute revenue in a complete year
+          END AS account_tier
+    FROM 
+        (
+            SELECT 
+             account_id  
+            --,account_id_latest
+            ,account_name
+            ,account_industry
+            ,account_type
+            ,account_region
+            ,account_owner
+            ,posting_fy
+            ,days_in_fy 
+            ,sum(-grp_crcy_amt)/days_in_fy AS rev_per_fy_ratio
+            ,sum(-grp_crcy_amt) as revenue
+            FROM revenue_cmb_temp as r
+            GROUP BY 1,2,3,4,5,6,7,8
+        ) as main;
+
+
+DROP TABLE IF EXISTS shipping_address_base_table_with_account_tiers;
+CREATE TEMPORARY TABLE shipping_address_base_table_with_account_tiers AS
+SELECT 
+  t.tminus
+ ,t.posting_date_fy 
+ ,t.account_id 
+ ,t.account_id_latest
+ ,t.account_name
+ ,t.account_industry
+ ,t.account_type
+ ,t.account_region  
+ ,t.account_owner
+ ,CASE WHEN t.account_id IS NULL THEN 'No Account' ELSE COALESCE(d.account_tier,'No Purchase') END AS account_tier
+ ,t.order_shipping_address
+ ,t.ship_to_market
+FROM year_shipping_address_base_table as t
+LEFT JOIN derive_tier_temp AS d ON d.account_id = t.account_id AND t.posting_date_fy = d.posting_fy;
+
+
+
+--STEP 7: JOIN IN PRODUCT-LEVEL DETAILS To the year-address-tier base table
+
+    
+DROP TABLE IF EXISTS product_revenue_temp;
+CREATE TEMPORARY TABLE product_revenue_temp AS
+    SELECT 
+     r.account_id                                         AS sfdc_account_id
+   -- ,r.account_id_latest                                  AS sfdc_account_id_latest
+    ,r.account_name                                       AS sfdc_account_name
+    ,r.account_industry                                   AS sfdc_account_industry
+    ,r.account_type                                       AS sfdc_account_type
+    ,r.account_region                                     AS sfdc_account_region
+    ,r.account_owner                                      AS sfdc_account_owner
+    ,r.ship_to_contact_id                                 AS sfdc_ship_to_contact_id
+    ,r.bill_to_contact_id                                 AS sfdc_bill_to_contact_id
+    ,r.order_owner_id                                     AS sfdc_order_owner_id
+    ,r.order_shipping_address                             AS sap_shipping_address
+    ,r.ship_to_market                                     AS sap_order_ship_to_market
+    ,r.SFDC_Order_Name                                    AS sfdc_order_name
+    ,r.sap_invoice_number                                 AS sap_invoice_number
+    ,r.order_id                                           AS sfdc_order_id
+    ,r.opty_owner_manager                                 AS sfdc_opty_owner_manager
+    ,r.opty_owner                                         AS sfdc_opty_owner
+    ,r.payment_method                                     AS sfdc_payment_method
+    ,r.opty_po_dt                                         AS sfdc_opty_po_dt
+    ,r.opty_stage_name                                    AS sfdc_opty_stage_name
+    ,r.opty_contact_id                                    AS sfdc_opty_contact_id
+    ,r.opty_id                                            AS sfdc_opty_id
+    ,r.business_unit                                      as sap_business_unit
+    ,r.product_family                                     as sap_product_family
+    ,r.product_group                                      as sap_product_group
+    ,r.product                                            as sap_product
+    ,r.sub_product                                        as sap_sub_product
+    ,r.order_placed_Date                                  as sfdc_order_placed_date
+    ,r.posting_dt                                         as sap_posting_date --posting date is the date the customer was invoiced, not the date they submitted an order. PO Date is the date that they submitted their order.
+    ,r.posting_fq                                         as sap_posting_fq
+    ,r.posting_fy                                         as sap_posting_fy
+    ,SUM(r.grp_crcy_amt)                                  as sap_actual_product_revenue
+    ,AVG(r.ordered_amt)                                   as sfdc_order_amount
+    FROM revenue_cmb_temp AS r
+    GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30;
+
+
+--STEP 8: Create the Operational Metric "OTIF" and then join it in to the final table
+
+DROP TABLE IF EXISTS closing_shipment_temp;
+CREATE TEMPORARY TABLE closing_shipment_temp AS
+
+    SELECT 
+    main.*
+     FROM (
+        SELECT 
+        Order_Name
+        ,order_id
+        ,Shipment_date
+        ,order_due_dt
+        ,closing_shipment
+        ,CASE WHEN SHIPMENT_DATE<=ORDER_DUE_DT THEN 'Y'
+              WHEN Shipment_date>ORDER_DUE_DT THEN 'N'
+              ELSE '?'
+              END AS is_on_time
+        ,COUNT(DISTINCT ORDER_ITEM_ID) AS order_items_in_closing_shipment
+        ,MAX(Shipment_date) OVER (PARTITION BY Order_Name) AS shipment_date_max
+        FROM TWISTDW.ANALYTICS.VW_OPR_SHIPPED_OIS 
+        WHERE closing_shipment = 'CLOSING SHIPMENT'
+        AND hold_forth IS NULL
+        GROUP BY 1,2,3,4,5,6
+        ) AS main
+        WHERE shipment_date = shipment_date_max;
+
+
+
+DROP TABLE IF EXISTS shipped_orders_temp;
+CREATE TEMPORARY TABLE shipped_orders_temp AS
+    SELECT 
+    main.*
+    ,CASE WHEN main.unshipped_orders>0 THEN 'N'
+          WHEN main.unshipped_orders=0 THEN 'Y'
+          WHEN main.unshipped_orders<0 THEN 'Y+'
+          END AS is_in_full
+    FROM 
+    (
+        SELECT 
+        Order_Name
+        ,SUM(abandoned_qty) as abandoned_qty
+        ,SUM(ordered_qty) as ordered_qty
+        ,SUM(shipped_qty) as shipped_qty
+        ,SUM( (IFNULL(ordered_qty,0) - IFNULL(abandoned_qty,0)) - IFNULL(shipped_qty,0))AS unshipped_orders
+        FROM TWISTDW.ANALYTCS.VW_SHIPMENT --one unique record per shipment id. a single order can have multiple shipment ids.
+        GROUP BY 1
+    ) as main;
+
+DROP TABLE IF EXISTS otif_temp;
+CREATE TEMPORARY TABLE otif_temp AS
+
+    select
+     cs.Order_Name
+    ,cs.Shipment_date
+    ,cs.order_due_dt
+    ,cs.is_on_time
+    ,cs.order_items_in_closing_shipment
+    ,so.abandoned_qty
+    ,so.ordered_qty
+    ,so.shipped_qty
+    ,so.unshipped_orders
+    ,so.is_in_full
+    ,CASE WHEN UPPER(cs.is_on_time) = 'Y' AND (UPPER(so.is_in_full) = 'Y' OR so.is_in_full = 'Y=') THEN 'On time and in full'
+          WHEN UPPER(cs.is_on_time) = 'Y' AND UPPER(so.is_in_full) = 'N' THEN 'On time but not in full'
+          WHEN UPPER(cs.is_on_time) = 'N' AND (UPPER(so.is_in_full) = 'Y' OR so.is_in_full = 'Y+')  THEN 'Not on time but in full'
+          WHEN UPPER(cs.is_on_time) = 'N' AND UPPER(so.is_in_full) = 'N' THEN 'Not on time and not in full'
+          END AS OTIF_DETAIL
+    ,CASE WHEN is_on_time = 'Y' AND (is_in_full = 'Y' OR is_in_full = 'Y+')   THEN 'OTIF'
+          ELSE 'NOT OTIF'
+          END AS OTIF_SUMMARY
+    FROM closing_shipment_temp AS cs
+    LEFT JOIN shipped_orders_temp as so ON cs.order_name = so.order_name;
+
+
+
+
+
+--Step 9: Create the final table
+
+
+   
+DROP TABLE IF EXISTS base_with_product_revenue;
+CREATE TEMPORARY TABLE base_with_product_revenue AS
+
+    SELECT 
+     b.tminus
+    ,b.posting_date_fy 
+    ,b.account_id   
+    ,b.account_id_latest
+    ,b.account_name    
+    ,b.account_industry
+    ,b.account_type    
+    ,b.account_region
+    ,b.account_owner
+    ,b.account_tier
+    ,b.order_shipping_address
+    ,b.ship_to_market
+    ,p.sfdc_account_id
+    ,p.sfdc_account_name
+    ,p.sfdc_account_industry
+    ,p.sfdc_account_type
+    ,p.sfdc_account_region    
+    ,p.sfdc_account_owner
+    ,p.sfdc_ship_to_contact_id
+    ,p.sfdc_bill_to_contact_id
+    ,p.sfdc_order_owner_id
+    ,p.sap_shipping_address
+    ,p.sap_order_ship_to_market
+    ,p.sfdc_order_name
+    ,p.sap_invoice_number
+    ,p.sfdc_order_id
+    ,p.sfdc_opty_owner_manager
+    ,p.sfdc_opty_owner
+    ,p.sfdc_opty_po_dt
+    ,p.sfdc_opty_stage_name
+    ,p.sfdc_opty_contact_id
+    ,p.sfdc_opty_id
+    ,p.sfdc_payment_method
+    ,p.sfdc_order_placed_date
+    ,p.sfdc_order_amount
+    ,p.sap_business_unit
+    ,p.sap_product_family
+    ,p.sap_product_group
+    ,p.sap_product
+    ,p.sap_sub_product
+    ,p.sap_posting_date 
+    ,p.sap_posting_fq
+    ,p.sap_posting_fy
+    ,p.sap_actual_product_revenue
+    FROM shipping_address_base_table_with_account_tiers AS b
+    LEFT JOIN product_revenue_temp AS p ON b.posting_date_fy = p.
+
+    
+                                            AND COALESCE(b.account_id,'') = COALESCE(p.sfdc_account_id,'')
+                                            AND COALESCE(b.order_shipping_address,'') = COALESCE(p.sap_shipping_address,'');
+
+DROP TABLE IF EXISTS twistdw_s_qa.tdw.agg_order_transactions;
+CREATE TABLE twistdw_s_qa.tdw.agg_order_transactions AS 
+    SELECT 
+     bp.tminus
+    ,bp.posting_date_fy 
+    ,bp.account_id
+    ,bp.account_name    
+    ,bp.account_industry
+    ,bp.account_type    
+    ,bp.account_region  
+    ,bp.account_owner
+    ,bp.account_tier
+    ,bp.order_shipping_address
+    ,bp.ship_to_market
+    ,bp.sfdc_account_id
+    ,bp.sfdc_account_name
+    ,bp.sfdc_account_industry
+    ,ff.account_industry AS first_shipping_address_account_industry
+    ,fa.account_industry AS first_account_industry
+    ,fs.account_industry AS first_shipping_address_industry
+    --,NULL AS sfdc_account_industry_shipping_address_ay
+    ,bp.sfdc_account_type
+    ,bp.sfdc_account_region
+    ,bp.sfdc_account_owner
+    ,bp.sfdc_ship_to_contact_id
+    ,bp.sfdc_bill_to_contact_id
+    ,bp.sfdc_order_owner_id
+    ,bp.sap_shipping_address
+    ,bp.sap_order_ship_to_market
+    ,bp.sfdc_order_name
+    ,bp.sap_invoice_number
+    ,bp.sfdc_order_id
+    ,bp.sfdc_opty_owner_manager
+    ,bp.sfdc_opty_owner
+    ,IFNULL(o.otif_detail,  'N/A') AS otif_detail
+    ,IFNULL(o.otif_summary, 'N/A') AS otif_summary
+    ,IFNULL(o.is_on_time,   'N/A') AS is_on_time
+    ,IFNULL(o.is_in_full,   'N/A') AS is_in_full
+    ,o.shipment_date
+    ,bp.sfdc_opty_po_dt
+    ,bp.sfdc_opty_stage_name
+    ,bp.sfdc_opty_contact_id
+    ,bp.sfdc_opty_id
+    ,bp.sfdc_payment_method
+    ,bp.sfdc_order_placed_date
+    ,bp.sfdc_order_amount
+    ,bp.sap_business_unit
+    ,bp.sap_product_family
+    ,bp.sap_product_group
+    ,bp.sap_product
+    ,bp.sap_sub_product
+    ,bp.sap_posting_date 
+    ,bp.sap_posting_fq
+    ,bp.sap_posting_fy
+    ,bp.sap_actual_product_revenue
+    ,ff.first_order_posting_fy AS first_account_shipping_address_posting_fy
+    ,ff.first_order_posting_fq AS first_account_shipping_address_posting_fq
+    ,ff.first_order_posting_dt AS first_account_shipping_address_posting_dt
+    ,fa.first_order_posting_dt AS first_account_posting_dt
+    ,fa.first_order_posting_fq AS first_account_posting_fq
+    ,fa.first_order_posting_fy AS first_account_posting_fy
+    ,fs.first_order_posting_dt AS first_shipping_address_posting_dt
+    ,fs.first_order_posting_fq AS first_shipping_address_posting_fq
+    ,fs.first_order_posting_fy AS first_shipping_address_posting_fy
+    ,CASE WHEN a.first_order_posting_fy IS NOT NULL THEN 1 ELSE 0 END AS is_first_purchase_account_shipping_address
+    ,CASE WHEN b.first_order_posting_fy IS NOT NULL THEN 1 ELSE 0 END AS is_first_purchase_account
+    ,CASE WHEN c.first_order_posting_fy IS NOT NULL THEN 1 ELSE 0 END AS is_first_purchase_shipping_address
+    FROM base_with_product_revenue AS bp 
+    --bring in otif results to qualifying orders
+    LEFT JOIN otif_temp AS o ON o.order_name = bp.sfdc_order_name 
+                            AND LOWER(bp.sfdc_payment_method)<>'Free of Charge' 
+                            AND LOWER(account_name) NOT LIKE '%twist pharma llc%'               --Twist Pharma
+                            AND LOWER(account_name) NOT LIKE '%abveris%'                        --Twist Bioscience
+                            AND LOWER(account_name) NOT LIKE '%twist bioscience corporation%'   --Twist Bioscience
+                            AND LOWER(account_name) NOT LIKE '%twist bioscience corp%'          --Twist Bioscience
+                            AND LOWER(account_name) NOT LIKE '%twist bioscience igg%'           --Twist Bioscience
+                            AND LOWER(account_name) NOT LIKE '%twist bioscience protein%'       --Twist Bioscience
+                            AND LOWER(account_name) NOT LIKE '%twist bioscience pdx test%'      --Twist Test
+                            AND LOWER(account_name) NOT LIKE '%twist bioscience prod testing%'  --Twist Test
+                            AND LOWER(account_name) NOT LIKE '%twist-tlv-qa2%'                  --Twist Test
+                            
+    --Put the year of details of the first order on each record
+    LEFT JOIN first_purchase_account_shipping_address_temp AS ff 
+                ON COALESCE(ff.order_shipping_address,'') = COALESCE(bp.order_shipping_address ,'') 
+                AND COALESCE(ff.account_id,'')= COALESCE(bp.account_id,'')
+    LEFT JOIN first_account_purchase_temp AS fa 
+                ON fa.account_id = bp.account_id
+    LEFT JOIN first_purchase_shipping_address_temp AS fs 
+                ON fs.order_shipping_address = bp.order_shipping_address
+    --identify the first record
+    LEFT JOIN first_purchase_account_shipping_address_temp AS a 
+                ON a.sfdc_order_name = bp.sfdc_order_name
+    LEFT JOIN first_account_purchase_temp AS b 
+                ON b.account_id = bp.account_id AND COALESCE(b.sfdc_order_name,'') = COALESCE(bp.sfdc_order_name,'')
+    LEFT JOIN first_purchase_shipping_address_temp AS c
+                ON c.sfdc_order_name = bp.sfdc_order_name;
+
+
+
+ 
+
+ 
+ 

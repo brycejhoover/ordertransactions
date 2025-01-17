@@ -1,3 +1,4 @@
+USE role bi_s_dev;
 USE twistdw_s_qa;
 --STEP 1: CREATE A YEAR TABLE TEMPLATE
 DROP TABLE IF EXISTS posting_date_placeholder_temp;
@@ -177,32 +178,32 @@ FROM (
     ,o.opty_contact_id
     ,o.opty_id
     FROM twistdw_s.analytics.vw_revenue_cmb AS r
-    LEFT JOIN (SELECT * 
+    LEFT JOIN (SELECT *
                FROM (
                     SELECT --this is needed because there are duplicate order names in salesforce (example: Q117119 has 4 records on FCT_SALES_ORDER. This is creating a cartesion product, which I fix with ths partitioned cleanup of fct_sales_order before joining
-                    order_name
+                    ord.Name AS order_name
                     ,ord.id AS order_id
-                    ,ord.payment_method
+                    ,ord_p.payment_method
                     ,ord.ship_to_contact_id
                     ,ord.bill_to_contact_id
-                    ,ord.order_owner_id
+                    ,ord.owner_id AS order_owner_id
                     ,ord.account_id
-                    ,ord.ordered_amt
-                    ,ord.order_created_ts
-                    ,ord.ship_to_country
+                    ,ord.total_amount AS ordered_amt --,ord.ordered_amt
+                    ,ord.created_date AS order_created_ts --ord.order_created_ts
+                    ,ord.shipping_country_code AS ship_to_country -- ord.ship_to_country
                     ,opp.po_date_c  AS opty_po_dt
                     ,opp.stage_name AS opty_stage_name
                     ,opp.contact_c  AS opty_contact_id
                     ,opp.id         AS opty_id
-                    ,ROW_NUMBER() OVER(PARTITION BY order_name ORDER BY order_created_ts DESC) AS row_num
-                    FROM TWISTDW.TDW.FCT_SALES_ORDER AS ord
-                    LEFT JOIN fivetran_landing.salesforce.opportunity AS opp on ord.opty_id = opp.id
+                    ,ROW_NUMBER() OVER(PARTITION BY ord.name ORDER BY order_created_ts DESC) AS row_num
+                    FROM fivetran_landing.salesforce."order" AS ord
+                    LEFT JOIN twistdw.tdw.fct_sales_order AS ord_p ON ord.id = ord_p.id
+                    LEFT JOIN fivetran_landing.salesforce.opportunity AS opp on ord.opportunity_id = opp.id
                     ) as main
                 WHERE main.row_num = 1
               ) AS o ON o.order_name = r.sfdc_order_name
     ) AS main
     LEFT JOIN twistdw.tdw.lkp_country_region_map as c ON c.country = COALESCE(main.ship_to_country_code,main.ship_to_country);
-
 
 
 
@@ -243,14 +244,14 @@ CREATE TEMPORARY TABLE updated_null_accounts AS
 DROP TABLE IF EXISTS updated_accounts;
 CREATE TEMPORARY TABLE updated_accounts AS
 
-    SELECT 
-            r.*
-            ,COALESCE(r.account_id_orig,a.account_id_orig) AS account_id 
-            FROM revenue_cmb_temp1 AS r
-            LEFT JOIN updated_null_accounts AS a ON a.order_shipping_address = r.order_shipping_address 
-                                                AND a.posting_dt = r.posting_dt 
-                                                AND r.account_id_orig IS NULL 
-                                                AND a.account_id_orig IS NOT NULL;
+SELECT 
+r.*
+,COALESCE(r.account_id_orig,a.account_id_orig) AS account_id 
+FROM revenue_cmb_temp1 AS r
+LEFT JOIN updated_null_accounts AS a ON a.order_shipping_address = r.order_shipping_address 
+                                    AND a.posting_dt = r.posting_dt 
+                                    AND r.account_id_orig IS NULL 
+                                    AND a.account_id_orig IS NOT NULL;
 
 --one shipping address can be linked to many accounts. to get a MECE brakout of revenue by tiers, I have to pick one account to assign the shipping address to. here I'm finding the latest shipping account and assigning that to all the revenue for the shipping address.
 
@@ -644,7 +645,6 @@ CREATE TEMPORARY TABLE closing_shipment_temp AS
         WHERE shipment_date = shipment_date_max;
 
 
-
 DROP TABLE IF EXISTS shipped_orders_temp;
 CREATE TEMPORARY TABLE shipped_orders_temp AS
     SELECT 
@@ -654,16 +654,16 @@ CREATE TEMPORARY TABLE shipped_orders_temp AS
           WHEN main.unshipped_orders<0 THEN 'Y+'
           END AS is_in_full
     FROM 
-    (
-        SELECT 
+    (  SELECT 
         Order_Name
         ,SUM(abandoned_qty) as abandoned_qty
         ,SUM(ordered_qty) as ordered_qty
         ,SUM(shipped_qty) as shipped_qty
         ,SUM( (IFNULL(ordered_qty,0) - IFNULL(abandoned_qty,0)) - IFNULL(shipped_qty,0))AS unshipped_orders
-        FROM TWISTDW.ANALYTCS.VW_SHIPMENT --one unique record per shipment id. a single order can have multiple shipment ids.
+        FROM TWISTDW.ANALYTICS.VW_SHIPMENT --one unique record per shipment id. a single order can have multiple shipment ids.
         GROUP BY 1
     ) as main;
+
 
 DROP TABLE IF EXISTS otif_temp;
 CREATE TEMPORARY TABLE otif_temp AS
@@ -689,7 +689,6 @@ CREATE TEMPORARY TABLE otif_temp AS
           END AS OTIF_SUMMARY
     FROM closing_shipment_temp AS cs
     LEFT JOIN shipped_orders_temp as so ON cs.order_name = so.order_name;
-
 
 
 
@@ -747,11 +746,13 @@ CREATE TEMPORARY TABLE base_with_product_revenue AS
     ,p.sap_posting_fy
     ,p.sap_actual_product_revenue
     FROM shipping_address_base_table_with_account_tiers AS b
-    LEFT JOIN product_revenue_temp AS p ON b.posting_date_fy = p.
-
+    LEFT JOIN product_revenue_temp AS p ON b.posting_date_fy = p.sap_posting_fy
     
                                             AND COALESCE(b.account_id,'') = COALESCE(p.sfdc_account_id,'')
                                             AND COALESCE(b.order_shipping_address,'') = COALESCE(p.sap_shipping_address,'');
+
+
+                                             
 
 DROP TABLE IF EXISTS twistdw_s_qa.tdw.agg_order_transactions;
 CREATE TABLE twistdw_s_qa.tdw.agg_order_transactions AS 
@@ -851,8 +852,10 @@ CREATE TABLE twistdw_s_qa.tdw.agg_order_transactions AS
                 ON c.sfdc_order_name = bp.sfdc_order_name;
 
 
-
  
+
+
+
 
  
  
